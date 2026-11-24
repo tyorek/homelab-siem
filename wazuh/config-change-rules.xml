@@ -1,7 +1,7 @@
 <!--
   P4 (2026-11-23): alerts on RouterOS and fw-edge config and user changes (T1562 impair defenses, T1098 account manipulation).
   Install on siem (CT 100) as /var/ossec/etc/rules/config_change_rules.xml (wazuh:wazuh 660). Decoders: config_change_decoders.xml.
-  IDs 100530-100550.
+  IDs 100530-100551.
 -->
 
 <group name="mikrotik,config_change,">
@@ -141,6 +141,16 @@
     <if_sid>100549</if_sid>
     <srcip>192.168.99.0/28</srcip>
     <description>fw-edge: GUI login by $(dstuser) from management VLAN $(srcip)</description>
+    <mitre><id>T1078</id></mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <!-- 2026-11-24: the admin's phone (VLAN 20, static lease 192.168.20.8, Private Wi-Fi Address set to Fixed).
+       Any other VLAN 20 address, including the phone on a dynamic lease, still alerts at level 8 (100549). -->
+  <rule id="100551" level="3">
+    <if_sid>100549</if_sid>
+    <srcip>192.168.20.8</srcip>
+    <description>fw-edge: GUI login by $(dstuser) from the admin phone $(srcip)</description>
     <mitre><id>T1078</id></mitre>
     <group>authentication_success,</group>
   </rule>
