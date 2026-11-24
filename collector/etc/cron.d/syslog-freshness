@@ -1,0 +1,2 @@
+# Enable after setting KUMA in /usr/local/bin/syslog-freshness
+#*/5 * * * * root /usr/local/bin/syslog-freshness

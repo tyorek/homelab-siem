@@ -1,0 +1,2 @@
+# 10-minute heartbeat so the collector's freshness check can tell a quiet resolver from a dead feed
+*/10 * * * * root /usr/bin/logger -p user.info -t syslog-heartbeat syslog-heartbeat

@@ -1,0 +1,6 @@
+{ "version": 1, "nomatch": "", "type": "string",
+  "table": [
+    { "index": "suricata-eve",        "value": "eve" },
+    { "index": "TechnitiumDNSServer", "value": "queries" }
+  ]
+}

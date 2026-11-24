@@ -1,0 +1,14 @@
+#!/bin/sh
+# Per-source freshness check -> Uptime Kuma push monitor (runbook section 5)
+KUMA="REPLACE_WITH_KUMA_PUSH_URL"
+case "$KUMA" in REPLACE*) echo "set KUMA push URL first" >&2; exit 1;; esac
+stale=""
+for d in rb5009 ag01 ag02 ag03 fw-edge primenodetls secnodetls tertnodetls buauth bunode1 bunode2; do
+  [ -n "$(find /var/log/remote/$d/$d.log -mmin -20 2>/dev/null)" ] || stale="$stale $d"
+done
+[ -n "$(find /var/log/remote/fw-edge/eve.log -mmin -20 2>/dev/null)" ] || stale="$stale fw-edge-eve"
+for f in rb5009 fw-edge; do
+  [ -n "$(find /var/log/remote/flows/$f -type f -name 'nfcapd.2*' -mmin -11 2>/dev/null | head -n 1)" ] || stale="$stale flows-$f"
+done
+if [ -z "$stale" ]; then curl -fsS -m 10 "$KUMA?status=up&msg=OK" >/dev/null
+else curl -fsS -m 10 "$KUMA?status=down&msg=stale:$(echo $stale | tr ' ' ',')" >/dev/null; fi

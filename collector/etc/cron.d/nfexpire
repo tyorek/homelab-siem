@@ -1,0 +1,2 @@
+17 0 * * * root /usr/bin/nfexpire -e /var/log/remote/flows/rb5009 -t 30d
+19 0 * * * root /usr/bin/nfexpire -e /var/log/remote/flows/fw-edge -t 30d

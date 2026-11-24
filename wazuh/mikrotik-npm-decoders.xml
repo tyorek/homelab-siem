@@ -1,0 +1,52 @@
+<!--
+  Wazuh decoders: MikroTik RouterOS (remote syslog) + Nginx Proxy Manager access logs.
+  Install on siem (CT 100) as /var/ossec/etc/decoders/mikrotik_npm_decoders.xml
+  (owner wazuh:wazuh, mode 660). NPM lines need the built-in Zeus decoder excluded (ossec.conf
+  <decoder_exclude>ruleset/decoders/0390-zeus_decoders.xml</decoder_exclude>, <rule_exclude>0255-zeus_rules.xml</rule_exclude>),
+  because its [timestamp] prematch claims them first. Test with /var/ossec/bin/wazuh-logtest, then restart wazuh-manager.
+  Written 2026-11-20.
+-->
+
+<!-- RouterOS firewall rule logs (log=yes), e.g.
+     ISO25 forward: in:bridge25 out:bridge20, connection-state:new src-mac 02:00:5e:c1:58:2e, proto TCP (SYN), 192.168.25.10:51515->192.168.20.7:445, len 52
+     The prefix (log-prefix) is optional; IPv6 addresses may be bracketed; ICMP has no ports. -->
+<decoder name="mikrotik-fw">
+  <prematch type="pcre2">(?:input|forward|output|prerouting|postrouting|srcnat|dstnat): in:\S+ out:\S+, </prematch>
+</decoder>
+
+<decoder name="mikrotik-fw-fields">
+  <parent>mikrotik-fw</parent>
+  <regex type="pcre2">(?:^|\s)(?:([A-Za-z0-9_-]+) )?(input|forward|output|prerouting|postrouting|srcnat|dstnat): in:(\S+) out:([^,\s]+), .*?proto (\w+)(?: \([^)]*\))?, \[?([0-9A-Fa-f.:]+?)\]?(?::(\d+))?->\[?([0-9A-Fa-f.:]+?)\]?(?::(\d+))?(?:,|$)</regex>
+  <order>mikrotik.prefix, mikrotik.chain, mikrotik.in, mikrotik.out, protocol, srcip, srcport, dstip, dstport</order>
+</decoder>
+
+<!-- RouterOS logins, e.g.
+     login failure for user admin from 203.0.113.5 via ssh
+     user labadmin logged in from 192.168.5.5 via winbox -->
+<!-- Two standalone decoders (not siblings): Wazuh only applies the first child decoder whose prematch
+     matches, so a shared parent would leave the second pattern's fields empty. -->
+<decoder name="mikrotik-login-fail">
+  <prematch type="pcre2">login failure for user \S+ from \S+ via </prematch>
+  <regex type="pcre2">login failure for user (\S+) from (\S+) via (\S+)</regex>
+  <order>dstuser, srcip, mikrotik.via</order>
+</decoder>
+
+<decoder name="mikrotik-login">
+  <prematch type="pcre2">user \S+ logged (?:in|out) from \S+ via </prematch>
+  <regex type="pcre2">user (\S+) logged (in|out) from (\S+) via (\S+)</regex>
+  <order>dstuser, mikrotik.action, srcip, mikrotik.via</order>
+</decoder>
+
+<!-- Nginx Proxy Manager access logs (proxy-host-*_access.log "proxy" format and
+     fallback_access.log "standard" format), e.g.
+     [20/Nov/2026:15:58:12 +0000] - 401 401 - GET https sup.example.com "/" [Client 203.0.113.5] [Length 172] [Gzip -] [Sent-to 192.168.99.3] "Mozilla/5.0" "-"
+     [20/Nov/2026:15:58:12 +0000] 404 - GET http 10.20.0.2 "/.env" [Client 198.51.100.7] [Length 153] [Gzip -] "curl/8.0" "-" -->
+<decoder name="npm-access">
+  <prematch type="pcre2">^\[\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] .* \[Client [^\]]+\] \[Length </prematch>
+</decoder>
+
+<decoder name="npm-access-fields">
+  <parent>npm-access</parent>
+  <regex type="pcre2">^\[[^\]]+\] (?:\S+ \S+ )?(\d{3}) - (\S+) (\S+) (\S+) "([^"]*)" \[Client ([^\]]+)\] \[Length (\d+)\].*?"([^"]*)" "[^"]*"\s*$</regex>
+  <order>id, protocol, npm.scheme, npm.host, url, srcip, npm.length, npm.useragent</order>
+</decoder>

@@ -1,0 +1,16 @@
+
+<agent_config name="fw-edge">
+  <!-- Suricata eve.json (2026-11-23): alerts, drops and anomalies go to Wazuh; the http/tls metadata is
+       forwarded only to the syslog collector (CT 112, 192.168.99.11) by syslog-ng on fw-edge, to keep the
+       manager's load down. Replaces the os-wazuh-agent plugin's own eve.json localfile (turned off there). -->
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/log/suricata/eve.json</location>
+    <ignore type="PCRE2">"event_type":"(http|tls)"</ignore>
+  </localfile>
+  <!-- P4 2026-11-23: OPNsense audit log (config changes, GUI logins); files are named by UTC date, fw-edge runs UTC -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/audit/audit_%Y%m%d.log</location>
+  </localfile>
+</agent_config>

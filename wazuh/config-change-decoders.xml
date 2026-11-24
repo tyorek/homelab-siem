@@ -1,0 +1,34 @@
+<!--
+  P4 (2026-11-23): config and user changes on the RouterOS fabric and on fw-edge (OPNsense).
+  Install on siem (CT 100) as /var/ossec/etc/decoders/config_change_decoders.xml (wazuh:wazuh 660).
+
+  RouterOS: lines arrive over the existing `remote` syslog action once a `system,info,!account` logging rule points at it.
+  Wazuh strips the syslog header, so the log starts with the topics, e.g.
+    system,info filter rule changed by mac-msg(winbox):labadmin@02:00:5e:03:3d:db/terminal/action:178 (*15 = /ip firewall filter set ...)
+    system,info nat rule changed by mac-msg(winbox):labadmin@02:00:5e:03:3d:db/terminal/script:dns-rr-check/action:184 (/ip firewall nat set *15 disabled=no)
+    system,info user agent changed by mac-msg(winbox):labadmin@02:00:5e:03:3d:db/terminal/action:186 (/user set ...)
+    system,info new script scheduled by mac-msg(winbox):admin@.../terminal (*2 = /system scheduler add ...)
+
+  fw-edge: the agent reads /var/log/audit/audit_%Y%m%d.log (central agent.conf, fw-edge block), RFC 5424 lines, e.g.
+    <..>1 2026-11-23T20:46:39+00:00 OPNsense.internal audit 64852 - [meta sequenceId="7"] user root@192.168.99.14 changed configuration to /conf/backup/config-1795445199.6263.xml in /api/firewall/filter/setRule/<uuid>
+    ... audit ... /index.php: Successful login for user 'root' from: 192.168.5.5 (Local Database)
+  The prematches are unanchored so they work whether or not the RFC 5424 header is pre-decoded.
+-->
+
+<decoder name="mikrotik-config">
+  <prematch type="pcre2">^system,info(?:,\w+)* .+? (?:added|changed|removed|moved|scheduled|enabled|disabled) by \S</prematch>
+  <regex type="pcre2">^system,info(?:,\w+)* (.+?) (added|changed|removed|moved|scheduled|enabled|disabled) by (?:[^:\s]*:)?([^@\s:/]+)@?(\S*)</regex>
+  <order>mikrotik.object, mikrotik.action, dstuser, mikrotik.actor</order>
+</decoder>
+
+<decoder name="opnsense-audit-config">
+  <prematch type="pcre2">user \S+@\S+ changed configuration to /conf/backup/</prematch>
+  <regex type="pcre2">user ([^@\s]+)@(\S+) changed configuration to (\S+) in (\S+)</regex>
+  <order>dstuser, srcip, opnsense.backup, url</order>
+</decoder>
+
+<decoder name="opnsense-audit-login">
+  <prematch type="pcre2">(?:Successful login|Web GUI authentication error|User logged out) for user '</prematch>
+  <regex type="pcre2">(Successful login|Web GUI authentication error|User logged out) for user '([^']*)' from: ([0-9A-Fa-f.:]+)</regex>
+  <order>opnsense.event, dstuser, srcip</order>
+</decoder>

@@ -1,0 +1,194 @@
+<!--
+  Wazuh rules for wazuh-mikrotik-npm-decoders.xml.
+  Install on siem (CT 100) as /var/ossec/etc/rules/mikrotik_npm_rules.xml (wazuh:wazuh, 660).
+  IDs 100500-100549: check they're free first: grep -rn 'id="1005' /var/ossec/etc/rules/
+  Written 2026-11-20. 2026-11-23 (P5): ATT&CK IDs on every rule that can alert (level > 0; level-0 base and
+  suppression rules never produce an alert, so a technique on them would do nothing); 100515 added.
+-->
+
+<group name="mikrotik,firewall,">
+
+  <rule id="100500" level="0">
+    <decoded_as>mikrotik-fw</decoded_as>
+    <description>MikroTik firewall log</description>
+  </rule>
+
+  <!-- VLAN 25 (IoT) inter-VLAN drops: log-prefix ISO25 (v4) and ISO25-6 (v6) -->
+  <rule id="100501" level="3">
+    <if_sid>100500</if_sid>
+    <field name="mikrotik.prefix">^ISO25</field>
+    <description>MikroTik: IoT VLAN 25 inter-VLAN traffic dropped: $(srcip) -> $(dstip):$(dstport) $(protocol)</description>
+    <group>iot,firewall_drop,</group>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+  <rule id="100502" level="10">
+    <if_sid>100501</if_sid>
+    <dstip>192.168.20.0/24</dstip>
+    <description>MikroTik: IoT device tried to reach the domain/server VLAN 20: $(srcip) -> $(dstip):$(dstport)</description>
+    <group>iot,firewall_drop,</group>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+  <rule id="100503" level="10">
+    <if_sid>100501</if_sid>
+    <dstip>192.168.99.0/24</dstip>
+    <description>MikroTik: IoT device tried to reach the management VLAN 99: $(srcip) -> $(dstip):$(dstport)</description>
+    <group>iot,firewall_drop,</group>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+  <rule id="100504" level="8" frequency="20" timeframe="120">
+    <if_matched_sid>100501</if_matched_sid>
+    <same_srcip />
+    <description>MikroTik: IoT device $(srcip) blocked 20+ times in 2 minutes (scanning or misbehaving)</description>
+    <group>iot,firewall_drop,</group>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+  <!-- ISO4: general LAN-to-LAN VLAN isolation drop -->
+  <rule id="100505" level="3">
+    <if_sid>100500</if_sid>
+    <field name="mikrotik.prefix">^ISO4$</field>
+    <description>MikroTik: inter-VLAN traffic dropped: $(srcip) -> $(dstip):$(dstport) $(protocol)</description>
+    <group>firewall_drop,</group>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+  <rule id="100506" level="8" frequency="30" timeframe="120">
+    <if_matched_sid>100505</if_matched_sid>
+    <same_srcip />
+    <description>MikroTik: $(srcip) hit VLAN isolation 30+ times in 2 minutes</description>
+    <group>firewall_drop,</group>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+  <!-- agent box (192.168.99.3) egress that its allow-list didn't cover -->
+  <rule id="100507" level="6">
+    <if_sid>100500</if_sid>
+    <srcip>192.168.99.3</srcip>
+    <description>MikroTik: agent box egress dropped: $(srcip) -> $(dstip):$(dstport) $(protocol)</description>
+    <group>firewall_drop,</group>
+    <mitre><id>T1071</id></mitre>
+  </rule>
+
+</group>
+
+<group name="mikrotik,authentication,">
+
+  <!-- child of the built-in 2501 (syslog "login failure"), which claims these lines before any root rule here -->
+  <rule id="100510" level="5">
+    <if_sid>2501</if_sid>
+    <decoded_as>mikrotik-login-fail</decoded_as>
+    <description>MikroTik: login failure for $(dstuser) from $(srcip) via $(mikrotik.via)</description>
+    <group>authentication_failed,</group>
+    <mitre><id>T1110</id></mitre>
+  </rule>
+
+  <rule id="100511" level="10" frequency="6" timeframe="300">
+    <if_matched_sid>100510</if_matched_sid>
+    <same_srcip />
+    <description>MikroTik: 6+ login failures from $(srcip) in 5 minutes (possible brute force)</description>
+    <group>authentication_failures,</group>
+    <mitre><id>T1110</id></mitre>
+  </rule>
+
+  <rule id="100512" level="3">
+    <decoded_as>mikrotik-login</decoded_as>
+    <match>logged in from</match>
+    <description>MikroTik: $(dstuser) logged in from $(srcip) via $(mikrotik.via)</description>
+    <group>authentication_success,</group>
+    <mitre><id>T1078</id></mitre>
+  </rule>
+
+  <!-- logins from outside VLAN 5 (admin workstation) and VLAN 99 (agent box) are unusual -->
+  <rule id="100513" level="8">
+    <if_sid>100512</if_sid>
+    <srcip negate="yes">192.168.5.0/28</srcip>
+    <description>MikroTik: login from an unexpected address: $(dstuser) from $(srcip) via $(mikrotik.via)</description>
+    <group>authentication_success,</group>
+    <mitre><id>T1078</id></mitre>
+  </rule>
+
+  <!-- added 2026-11-23 (P5): winbox over MAC from the admin desktop reports the desktop's MAC, not an IP -->
+  <rule id="100515" level="3">
+    <if_sid>100513</if_sid>
+    <match>logged in from 02:00:5e:03:3d:db via</match>
+    <description>MikroTik: $(dstuser) logged in from the admin desktop over MAC-winbox</description>
+    <mitre><id>T1078</id></mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <rule id="100514" level="3">
+    <if_sid>100513</if_sid>
+    <srcip>192.168.99.0/24</srcip>
+    <description>MikroTik: $(dstuser) logged in from management VLAN $(srcip) via $(mikrotik.via)</description>
+    <group>authentication_success,</group>
+    <mitre><id>T1078</id></mitre>
+  </rule>
+
+</group>
+
+<group name="npm,web,accesslog,">
+
+  <rule id="100520" level="0">
+    <decoded_as>npm-access</decoded_as>
+    <description>Nginx Proxy Manager access log</description>
+  </rule>
+
+  <rule id="100521" level="5">
+    <if_sid>100520</if_sid>
+    <id>^401$|^403$</id>
+    <description>NPM: $(id) on $(npm.host)$(url) from $(srcip)</description>
+    <group>authentication_failed,</group>
+    <mitre><id>T1110</id></mitre>
+  </rule>
+
+  <!-- your own LAN typos stay quiet -->
+  <rule id="100522" level="0">
+    <if_sid>100521</if_sid>
+    <srcip>192.168.0.0/16</srcip>
+    <description>NPM: 401/403 from the LAN (ignored)</description>
+  </rule>
+
+  <rule id="100523" level="0">
+    <if_sid>100521</if_sid>
+    <srcip>10.0.0.0/8</srcip>
+    <description>NPM: 401/403 from the DMZ/LAN (ignored)</description>
+  </rule>
+
+  <rule id="100524" level="10" frequency="10" timeframe="120">
+    <if_matched_sid>100521</if_matched_sid>
+    <same_srcip />
+    <description>NPM: 10+ auth rejections from $(srcip) in 2 minutes on the public admin UIs (possible brute force)</description>
+    <group>authentication_failures,</group>
+    <mitre><id>T1110</id></mitre>
+  </rule>
+
+  <rule id="100525" level="7">
+    <if_sid>100520</if_sid>
+    <url type="pcre2">(?i)/(?:\.env|\.git/|wp-login\.php|wp-admin|xmlrpc\.php|phpmyadmin|cgi-bin/|vendor/phpunit|actuator|boaform|\.aws/|server-status|HNAP1)</url>
+    <description>NPM: recon/exploit probe on $(npm.host)$(url) from $(srcip)</description>
+    <group>web_scan,attack,</group>
+    <mitre><id>T1595</id></mitre>
+  </rule>
+
+  <rule id="100526" level="6" frequency="20" timeframe="60">
+    <if_matched_sid>100520</if_matched_sid>
+    <id>^404$</id>
+    <same_srcip />
+    <description>NPM: 20+ 404s from $(srcip) in 60 seconds (web scanning)</description>
+    <group>web_scan,</group>
+    <mitre><id>T1595</id></mitre>
+  </rule>
+
+  <!-- 444 = the Next-Action (React Server Components) drop in server_proxy.conf -->
+  <rule id="100527" level="7">
+    <if_sid>100520</if_sid>
+    <id>^444$</id>
+    <description>NPM: request dropped (444, Next-Action RSC exploit block) on $(npm.host) from $(srcip)</description>
+    <group>attack,</group>
+    <mitre><id>T1190</id></mitre>
+  </rule>
+
+</group>

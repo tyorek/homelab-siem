@@ -1,0 +1,15 @@
+{ "version": 1, "nomatch": "_unknown", "type": "string",
+  "table": [
+    { "index": "192.168.99.1",  "value": "rb5009" },
+    { "index": "192.168.99.4",  "value": "ag01" },
+    { "index": "192.168.99.5",  "value": "ag02" },
+    { "index": "192.168.99.6",  "value": "ag03" },
+    { "index": "172.16.255.1",  "value": "fw-edge" },
+    { "index": "192.168.15.9",  "value": "primenodetls" },
+    { "index": "192.168.15.10", "value": "secnodetls" },
+    { "index": "192.168.15.11", "value": "tertnodetls" },
+    { "index": "10.20.0.9",     "value": "buauth" },
+    { "index": "10.20.0.13",    "value": "bunode1" },
+    { "index": "10.20.0.14",    "value": "bunode2" }
+  ]
+}

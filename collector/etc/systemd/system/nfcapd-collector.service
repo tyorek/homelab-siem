@@ -1,0 +1,15 @@
+[Unit]
+Description=nfcapd flow collector (RB5009 IPFIX, fw-edge NetFlow v9)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Group=adm
+UMask=0027
+ExecStart=/usr/bin/nfcapd -S 1 -t 300 -p 2055 -b 192.168.99.11 \
+  -n rb5009,192.168.99.1,/var/log/remote/flows/rb5009 \
+  -n fw-edge,172.16.255.1,/var/log/remote/flows/fw-edge
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

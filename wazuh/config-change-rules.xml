@@ -1,0 +1,164 @@
+<!--
+  P4 (2026-11-23): alerts on RouterOS and fw-edge config and user changes (T1562 impair defenses, T1098 account manipulation).
+  Install on siem (CT 100) as /var/ossec/etc/rules/config_change_rules.xml (wazuh:wazuh 660). Decoders: config_change_decoders.xml.
+  IDs 100530-100550.
+-->
+
+<group name="mikrotik,config_change,">
+
+  <rule id="100530" level="0">
+    <decoded_as>mikrotik-config</decoded_as>
+    <description>MikroTik config change (base)</description>
+  </rule>
+
+  <!-- The router's own DNS failover scripts toggle NAT rules; keep those visible but quiet (100531 excludes them). -->
+  <rule id="100538" level="3">
+    <if_sid>100530</if_sid>
+    <match type="pcre2">/script:dns-(?:rr|fallback)-check/</match>
+    <description>MikroTik: DNS failover script $(mikrotik.object) $(mikrotik.action) (automatic)</description>
+    <mitre><id>T1562</id></mitre>
+    <group>automated,</group>
+  </rule>
+
+  <rule id="100531" level="5">
+    <if_sid>100530</if_sid>
+    <match type="pcre2" negate="yes">/script:dns-(?:rr|fallback)-check/</match>
+    <description>MikroTik: $(mikrotik.object) $(mikrotik.action) by $(dstuser)</description>
+    <mitre><id>T1562</id></mitre>
+  </rule>
+
+  <rule id="100532" level="9">
+    <if_sid>100531</if_sid>
+    <field name="mikrotik.object" type="pcre2">^(?:filter|nat|raw|mangle)6? rule$|^address list6? entry$</field>
+    <description>MikroTik: firewall $(mikrotik.object) $(mikrotik.action) by $(dstuser)</description>
+    <mitre><id>T1562.004</id></mitre>
+  </rule>
+
+  <rule id="100533" level="11">
+    <if_sid>100532</if_sid>
+    <field name="mikrotik.action" type="pcre2">^(?:removed|disabled)$</field>
+    <description>MikroTik: firewall $(mikrotik.object) $(mikrotik.action) by $(dstuser) (defenses weakened)</description>
+    <mitre><id>T1562.004</id></mitre>
+  </rule>
+
+  <rule id="100534" level="11">
+    <if_sid>100531</if_sid>
+    <field name="mikrotik.object" type="pcre2">(?i)^user\b|^group\b|ssh.?key|public key</field>
+    <description>MikroTik: account change: $(mikrotik.object) $(mikrotik.action) by $(dstuser)</description>
+    <mitre><id>T1098</id></mitre>
+    <group>account_changed,</group>
+  </rule>
+
+  <rule id="100535" level="12">
+    <if_sid>100534</if_sid>
+    <field name="mikrotik.object" type="pcre2">(?i)^user\b</field>
+    <field name="mikrotik.action">^added$</field>
+    <description>MikroTik: new user account created: $(mikrotik.object) by $(dstuser)</description>
+    <mitre><id>T1136</id><id>T1098</id></mitre>
+    <group>adduser,account_changed,</group>
+  </rule>
+
+  <rule id="100536" level="10">
+    <if_sid>100531</if_sid>
+    <field name="mikrotik.object" type="pcre2">(?i)^log(?:ging)? (?:rule|action)|^logging\b</field>
+    <description>MikroTik: logging config $(mikrotik.object) $(mikrotik.action) by $(dstuser) (could blind the SIEM)</description>
+    <mitre><id>T1562.006</id></mitre>
+  </rule>
+
+  <rule id="100537" level="9">
+    <if_sid>100531</if_sid>
+    <field name="mikrotik.object" type="pcre2">(?i)service|^ip service|^certificate|^romon|^mac server|^snmp</field>
+    <description>MikroTik: management service config $(mikrotik.object) $(mikrotik.action) by $(dstuser)</description>
+    <mitre><id>T1562</id><id>T1133</id></mitre>
+  </rule>
+
+  <rule id="100539" level="10" frequency="15" timeframe="600">
+    <if_matched_sid>100531</if_matched_sid>
+    <same_user />
+    <description>MikroTik: 15+ config changes by $(dstuser) in 10 minutes</description>
+    <mitre><id>T1562</id></mitre>
+  </rule>
+
+</group>
+
+<group name="opnsense,config_change,">
+
+  <rule id="100540" level="0">
+    <decoded_as>opnsense-audit-config</decoded_as>
+    <description>fw-edge config change (base)</description>
+  </rule>
+
+  <rule id="100541" level="5">
+    <if_sid>100540</if_sid>
+    <description>fw-edge: configuration changed by $(dstuser) from $(srcip) in $(url)</description>
+    <mitre><id>T1562</id></mitre>
+  </rule>
+
+  <rule id="100542" level="9">
+    <if_sid>100541</if_sid>
+    <url type="pcre2">(?i)/api/firewall/|firewall_rules|firewall_nat|firewall_aliases|/api/firewall/alias</url>
+    <description>fw-edge: firewall rules changed by $(dstuser) from $(srcip) in $(url)</description>
+    <mitre><id>T1562.004</id></mitre>
+  </rule>
+
+  <rule id="100543" level="10">
+    <if_sid>100541</if_sid>
+    <url type="pcre2">(?i)/api/ids/|/api/wazuhagent/|/api/syslog/|/api/diagnostics/log|diag_logs_settings|system_advanced_logging</url>
+    <description>fw-edge: IDS, logging or SIEM agent settings changed by $(dstuser) from $(srcip) in $(url)</description>
+    <mitre><id>T1562.001</id><id>T1562.006</id></mitre>
+  </rule>
+
+  <rule id="100544" level="11">
+    <if_sid>100541</if_sid>
+    <url type="pcre2">(?i)system_usermanager|system_groupmanager|system_authservers|/api/auth/|/api/core/user|/api/core/group</url>
+    <description>fw-edge: user, group or authentication settings changed by $(dstuser) from $(srcip) in $(url)</description>
+    <mitre><id>T1098</id></mitre>
+    <group>account_changed,</group>
+  </rule>
+
+  <rule id="100545" level="0">
+    <decoded_as>opnsense-audit-login</decoded_as>
+    <description>fw-edge GUI login event (base)</description>
+  </rule>
+
+  <rule id="100546" level="3">
+    <if_sid>100545</if_sid>
+    <field name="opnsense.event">^Successful login$</field>
+    <description>fw-edge: GUI login by $(dstuser) from $(srcip)</description>
+    <mitre><id>T1078</id></mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <rule id="100549" level="8">
+    <if_sid>100546</if_sid>
+    <srcip negate="yes">192.168.5.0/28</srcip>
+    <description>fw-edge: GUI login from an unexpected address: $(dstuser) from $(srcip)</description>
+    <mitre><id>T1078</id></mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <rule id="100550" level="3">
+    <if_sid>100549</if_sid>
+    <srcip>192.168.99.0/28</srcip>
+    <description>fw-edge: GUI login by $(dstuser) from management VLAN $(srcip)</description>
+    <mitre><id>T1078</id></mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <rule id="100547" level="5">
+    <if_sid>100545</if_sid>
+    <field name="opnsense.event">^Web GUI authentication error$</field>
+    <description>fw-edge: GUI login failure for $(dstuser) from $(srcip)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <rule id="100548" level="10" frequency="6" timeframe="300">
+    <if_matched_sid>100547</if_matched_sid>
+    <same_srcip />
+    <description>fw-edge: 6+ GUI login failures from $(srcip) in 5 minutes (possible brute force)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>authentication_failures,</group>
+  </rule>
+
+</group>

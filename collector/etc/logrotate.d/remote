@@ -1,0 +1,15 @@
+/var/log/remote/*/*.log {
+  daily
+  rotate 30
+  maxage 30
+  dateext
+  compress
+  delaycompress
+  missingok
+  notifempty
+  create 0640 root adm
+  sharedscripts
+  postrotate
+    /usr/lib/rsyslog/rsyslog-rotate
+  endscript
+}
