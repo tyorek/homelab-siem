@@ -1,7 +1,7 @@
 <!--
   P4 (2026-11-23): alerts on RouterOS and fw-edge config and user changes (T1562 impair defenses, T1098 account manipulation).
   Install on siem (CT 100) as /var/ossec/etc/rules/config_change_rules.xml (wazuh:wazuh 660). Decoders: config_change_decoders.xml.
-  IDs 100530-100551.
+  IDs 100530-100553.
 -->
 
 <group name="mikrotik,config_change,">
@@ -152,6 +152,24 @@
     <srcip>192.168.20.8</srcip>
     <description>fw-edge: GUI login by $(dstuser) from the admin phone $(srcip)</description>
     <mitre><id>T1078</id></mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <!-- 2026-11-24: day-to-day GUI work uses the named admin account; root is for emergencies. A root login from an
+       expected address is raised to 6 so it stands out. From an unexpected address 100549 (level 8) already applies. -->
+  <rule id="100552" level="6">
+    <if_sid>100546</if_sid>
+    <user type="pcre2">^root$</user>
+    <description>fw-edge: GUI login as root from $(srcip) (named admin account expected)</description>
+    <mitre><id>T1078.003</id></mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <rule id="100553" level="6">
+    <if_sid>100550, 100551</if_sid>
+    <user type="pcre2">^root$</user>
+    <description>fw-edge: GUI login as root from $(srcip) (named admin account expected)</description>
+    <mitre><id>T1078.003</id></mitre>
     <group>authentication_success,</group>
   </rule>
 
